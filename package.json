@@ -1,6 +1,6 @@
 {
   "name": "dsh-corner-studio",
-  "version": "0.1.0-beta.1",
+  "version": "1.0.0",
   "description": "DeepSeek Harness 插件：一条滑杆统管全界面圆角与平滑度，界面字体与代码字体可分别更换。One slider for all corner radii and smoothness in DeepSeek Harness, with independent UI and code fonts.",
   "license": "MIT",
   "author": "xfpuls",

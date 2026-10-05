@@ -48,14 +48,16 @@ function load() {
 
 /** A ctx stub that records everything the plugin touches. */
 function createFakeCtx() {
-	const calls = { overrides: [], registered: [], disposers: [] };
+	const calls = { overrides: [], registered: [], disposers: [], fontSizes: [] };
 	return {
 		calls,
 		theme: {
 			overrideTokens: (source, tokens) => {
 				calls.overrides.push({ source, tokens });
 				return () => { calls.overridesDisposed = (calls.overridesDisposed || 0) + 1; };
-			}
+			},
+			setFontSize: (size) => { calls.fontSizes.push(size); },
+			getTheme: () => ({ fontSize: 14 })
 		},
 		locale: { register: () => () => {}, bind: () => (key) => key },
 		effect: (fn, label) => {
@@ -398,48 +400,56 @@ test('字体预设按分组组织，且选项足够多', () => {
 	}
 });
 
-test('字重默认不覆盖任何 token；提升后只改正文简写，标题与强调保持原样', () => {
-	const { computeOverrides, WEIGHT_BASE_TOKENS, DEFAULT_WEIGHT } = load();
+test('字号默认不覆盖任何 token；缩放后按比例改写字阶并保留字重列', () => {
+	const { computeOverrides, UI_FONT_STEPS, FONT_SIZE_DEFAULT } = load();
 	const base = { enabled: true, radius: 12, smooth: 1.5, fontUi: { mode: 'system' }, fontCode: { mode: 'system' } };
 
-	const atDefault = computeOverrides(Object.assign({ weight: DEFAULT_WEIGHT }, base));
-	assert.equal(atDefault['--cs-weight'], undefined, '默认字重不应产生覆盖');
-	for (const name of Object.keys(WEIGHT_BASE_TOKENS)) {
+	const atDefault = computeOverrides(Object.assign({ fontSize: FONT_SIZE_DEFAULT }, base));
+	for (const [name] of UI_FONT_STEPS) {
 		assert.equal(atDefault[name], undefined, name + ' 默认不应被覆盖');
 	}
 
-	const bold = computeOverrides(Object.assign({ weight: 600 }, base));
-	assert.equal(bold['--cs-weight'].light, '600');
-	for (const name of Object.keys(WEIGHT_BASE_TOKENS)) {
-		const value = bold[name].light;
-		assert.ok(value.indexOf('var(--cs-weight, 400)') === 0, name + ' 应以字重变量开头');
-		assert.ok(value.indexOf(WEIGHT_BASE_TOKENS[name]) !== -1, name + ' 应保留宿主原始简写');
+	// 14 -> 21 是 1.5 倍
+	const bigger = computeOverrides(Object.assign({ fontSize: 21 }, base));
+	assert.equal(bigger['--dsw-font-s-14'].light, '21px/33px var(--dsw-font-family)');
+	assert.equal(bigger['--dsw-font-xs-13'].light, '19.5px/30px var(--dsw-font-family)');
+	// 字重列必须原样保留，否则标题与强调会被压平
+	assert.equal(bigger['--dsw-font-s-strong-14'].light, '500 21px/33px var(--dsw-font-family)');
+	assert.equal(bigger['--dsw-font-xl-24'].light, '600 36px/48px var(--dsw-font-family)');
+	for (const [name] of UI_FONT_STEPS) {
+		assert.ok(bigger[name].light.indexOf('var(--dsw-font-family)') !== -1, name + ' 应指向界面字体');
+		assert.equal(bigger[name].light, bigger[name].dark, name + ' 明暗应同值');
 	}
-	assert.equal(bold['--dsw-font-markdown-h1'], undefined, '标题不应被动到');
-	assert.equal(bold['--dsw-font-s-strong-14'], undefined, '强调变体不应被动到');
-	assert.equal(bold['--dsw-font-markdown-base-strong'], undefined, 'markdown 强调不应被动到');
 });
 
-test('字重经注入动作写入持久化并可读取', () => {
+test('字号经注入动作持久化，并驱动官方内容字号', () => {
 	const plugin = load();
 	const ctx = createFakeCtx();
 	memory.clear();
 	plugin.apply(ctx);
 	const { entry } = ctx.calls.registered[0];
 	const injected = entry.inject();
-	assert.equal(injected.getState().weight, 400, '默认字重应为 400');
-	injected.setWeight(600);
-	assert.equal(injected.getState().weight, 600);
-	assert.equal(memory.get('dsh-corner-studio:weight'), '600');
+	assert.equal(injected.getState().fontSize, 14, '默认字号应为 14');
+	injected.setFontSize(18);
+	assert.equal(injected.getState().fontSize, 18);
+	assert.equal(memory.get('dsh-corner-studio:font-size'), '18');
+	assert.equal(ctx.calls.fontSizes[ctx.calls.fontSizes.length - 1], 18, '应调用官方 setFontSize');
 	const last = ctx.calls.overrides[ctx.calls.overrides.length - 1];
-	assert.equal(last.tokens['--cs-weight'].light, '600');
+	assert.equal(last.tokens['--dsw-font-s-14'].light, '18px/28.3px var(--dsw-font-family)');
+});
+
+test('字号滑杆区间为 11–22px，默认 14px', () => {
+	const { FONT_SIZE_MIN, FONT_SIZE_MAX, FONT_SIZE_STEP, FONT_SIZE_DEFAULT } = load();
+	assert.equal(FONT_SIZE_MIN, 11);
+	assert.equal(FONT_SIZE_MAX, 22);
+	assert.equal(FONT_SIZE_STEP, 1);
+	assert.equal(FONT_SIZE_DEFAULT, 14);
 });
 
 test('字体平滑开关进入样式表，关闭时完全不出现', () => {
 	const { frameCss } = load();
 	const off = frameCss({ smoothFont: false });
 	assert.ok(off.indexOf('font-smoothing') === -1, '关闭时不应出现平滑属性');
-	assert.ok(off.indexOf('font-weight:var(--cs-weight') !== -1, 'body 字重规则应始终存在');
 	assert.ok(off.indexOf('--dsh-windows-content-radius') !== -1, '最外层圆角桥接应始终存在');
 
 	const on = frameCss({ smoothFont: true });
@@ -463,11 +473,3 @@ test('字体平滑经注入动作持久化并可读取', () => {
 	assert.equal(memory.get('dsh-corner-studio:smooth-font'), 'off');
 });
 
-test('字重滑杆的取值区间为 300–700 且步进 100', () => {
-	const { WEIGHT_MIN, WEIGHT_MAX, WEIGHT_STEP, DEFAULT_WEIGHT } = load();
-	assert.equal(WEIGHT_MIN, 300);
-	assert.equal(WEIGHT_MAX, 700);
-	assert.equal(WEIGHT_STEP, 100);
-	assert.equal(DEFAULT_WEIGHT, 400, '默认值必须落在区间内');
-	assert.ok(DEFAULT_WEIGHT >= WEIGHT_MIN && DEFAULT_WEIGHT <= WEIGHT_MAX);
-});
