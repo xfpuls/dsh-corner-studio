@@ -1,0 +1,61 @@
+{
+  "name": "dsh-corner-studio",
+  "version": "0.1.0-beta.1",
+  "description": "DeepSeek Harness 圆角与字体工作室：一条滑杆统管全界面圆角与平滑度，界面字体与代码字体可分别更换。Corner & font studio for DeepSeek Harness: one slider for all corner radii and smoothness, with independent UI and code fonts.",
+  "license": "MIT",
+  "author": "xfpuls",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xfpuls/dsh-corner-studio.git"
+  },
+  "homepage": "https://github.com/xfpuls/dsh-corner-studio",
+  "bugs": {
+    "url": "https://github.com/xfpuls/dsh-corner-studio/issues"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "theme",
+    "radius",
+    "corner-shape",
+    "font",
+    "typography"
+  ],
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "rollback.ps1",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-store",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-theme"
+      ],
+      "platform": "web",
+      "immediately": true
+    }
+  },
+  "peerDependencies": {
+    "react": "^18.2.0",
+    "@deepseek-ai/cordis": "^4.0.4"
+  }
+}
